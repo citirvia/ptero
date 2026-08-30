@@ -1,0 +1,638 @@
+// Ptero backend — PostgreSQL schema (Prisma)
+// Persists the app-level domain (users, sessions, audit, notifications, teams),
+// the marketing CMS (plans, incidents, roadmap, changelog, locations) and ops
+// history (deployments, usage snapshots). Server/console/file data still comes
+// live from Pterodactyl; this DB stores the account layer the panel doesn't.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  DEVELOPER
+  BILLING
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  INVITED
+}
+
+enum AuditType {
+  AUTH
+  SERVER
+  DEPLOY
+  PERMISSION
+  BILLING
+  ADMIN
+  SYSTEM
+}
+
+enum NotificationType {
+  DEPLOY
+  ALERT
+  BILLING
+  TEAM
+  SYSTEM
+}
+
+enum PlanRegion {
+  EU
+  US
+  TR
+  GLOBAL
+}
+
+enum IncidentSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+  MAINTENANCE
+}
+
+enum IncidentStatus {
+  INVESTIGATING
+  IDENTIFIED
+  MONITORING
+  RESOLVED
+  SCHEDULED
+  COMPLETED
+}
+
+enum RoadmapStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum LocationStatus {
+  ONLINE
+  DEGRADED
+  MAINTENANCE
+  OFFLINE
+}
+
+enum DeploymentStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum CreditLedgerType {
+  INITIAL_GRANT
+  MANUAL_ADJUSTMENT
+  PROMO_REDEMPTION
+  DEPLOYMENT_CHARGE
+  MONTHLY_RENEWAL
+  REFUND
+}
+
+enum ServerBillingStatus {
+  ACTIVE
+  GRACE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PromoCodeType {
+  FIXED_CREDITS
+  PERCENT
+}
+
+enum PromoCodeScope {
+  DEPLOY_DISCOUNT
+  CREDIT_BALANCE
+}
+
+enum TicketCategory {
+  BILLING
+  DEPLOYMENT
+  NETWORKING
+  ACCOUNT
+  OTHER
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  WAITING_ON_STAFF
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TemplateSubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SalesLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CLOSED
+  SPAM
+}
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  passwordHash      String
+  discordId         String?    @unique
+  name              String
+  role              Role       @default(VIEWER)
+  status            UserStatus @default(ACTIVE)
+  creditBalance     Int        @default(0)
+  signupBonusGrantedAt DateTime?
+
+  // Pterodactyl linkage (per-tenant). The client key is stored AES-256-GCM encrypted.
+  pteroUserId       Int?
+  pteroClientKeyEnc String?
+
+  avatarUrl         String?
+  locale            String     @default("en")
+  theme             String     @default("dark")
+  twoFactorEnabled  Boolean    @default(false)
+
+  lastLoginAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  sessions          Session[]
+  apiKeys           ApiKey[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  memberships       TeamMember[]
+  ownedTeams        Team[]         @relation("TeamOwner")
+  webhooks          Webhook[]
+  deployments       Deployment[]
+  creditLedgers     CreditLedger[]
+  serverSubscriptions ServerSubscription[]
+  supportTickets    SupportTicket[]  @relation("SupportRequester")
+  assignedTickets   SupportTicket[]  @relation("SupportAssignee")
+  supportMessages   SupportMessage[] @relation("SupportAuthor")
+  templateSubmissions TemplateSubmission[]
+  promoRedemptions  PromoRedemption[]
+
+  @@index([status])
+}
+
+model AppConfig {
+  id                Int      @id
+  signupBonusCredits Int     @default(500)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  name       String
+  prefix     String    @unique
+  keyHash    String
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  actorName String
+  action    String
+  target    String?
+  type      AuditType @default(SYSTEM)
+  ip        String?
+  metadata  Json?
+  createdAt DateTime  @default(now())
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+}
+
+model Team {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  owner     User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String
+  createdAt DateTime     @default(now())
+  members   TeamMember[]
+}
+
+model TeamMember {
+  id        String     @id @default(cuid())
+  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  role      Role       @default(VIEWER)
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+
+  @@unique([teamId, userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Marketing CMS
+// ─────────────────────────────────────────────────────────────────────────
+
+model Plan {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  name        String
+  tagline     String?
+  ramMb       Int
+  cpuPct      Int        // 100 = 1 vCore
+  diskMb      Int
+  dbCount     Int        @default(0)
+  backups     Int        @default(0)
+  creditCost  Int        @default(0)
+  priceMonth  Int        // cents
+  priceYear   Int        // cents
+  region      PlanRegion @default(GLOBAL)
+  featured    Boolean    @default(false)
+  popular     Boolean    @default(false)
+  published   Boolean    @default(true)
+  sortIndex   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([published, sortIndex])
+}
+
+model Incident {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  title       String
+  severity    IncidentSeverity @default(MINOR)
+  status      IncidentStatus   @default(INVESTIGATING)
+  services    String[]
+  body        String
+  startedAt   DateTime         @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  updates     IncidentUpdate[]
+
+  @@index([status, startedAt(sort: Desc)])
+}
+
+model IncidentUpdate {
+  id         String   @id @default(cuid())
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incidentId String
+  body       String
+  label      String   @default("Update")  // Investigating | Monitoring | Resolved | ...
+  postedAt   DateTime @default(now())
+
+  @@index([incidentId, postedAt(sort: Desc)])
+}
+
+model RoadmapItem {
+  id        String        @id @default(cuid())
+  title     String
+  body      String
+  category  String        @default("general")
+  status    RoadmapStatus @default(PLANNED)
+  votes     Int           @default(0)
+  eta       String?
+  sortIndex Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([status, sortIndex])
+}
+
+model ChangelogEntry {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  version     String
+  body        String
+  tags        String[]
+  publishedAt DateTime @default(now())
+
+  @@index([publishedAt(sort: Desc)])
+}
+
+model Location {
+  id        String         @id @default(cuid())
+  slug      String         @unique
+  city      String
+  region    String
+  country   String
+  flag      String         // emoji or ISO code
+  lat       Float
+  lng       Float
+  status    LocationStatus @default(ONLINE)
+  hardware  String
+  capacity  Int            @default(0)   // % filled
+  sortIndex Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([sortIndex])
+}
+
+model CustomTemplate {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  runtime     String
+  framework   String
+  category    String
+  language    String
+  tags        String[]
+  deploys     Int      @default(0)
+  stars       Int      @default(0)
+  author      String
+  official    Boolean  @default(false)
+  popular     Boolean  @default(false)
+  abbr        String
+  color       String
+  eggId       Int?
+  nestId      Int?
+  packageArchiveName String?
+  packageStorageKey  String?
+  visiblePaths       String[] @default([])
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([published, createdAt(sort: Desc)])
+}
+
+model TemplateSubmission {
+  id          String                   @id @default(cuid())
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  name        String
+  description String
+  runtime     String
+  framework   String
+  category    String
+  language    String
+  tags        String[]
+  repoUrl     String
+  notes       String?
+  status      TemplateSubmissionStatus @default(PENDING)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model SalesLead {
+  id        String          @id @default(cuid())
+  name      String
+  email     String
+  company   String
+  teamSize  String
+  message   String?
+  status    SalesLeadStatus @default(NEW)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([email, createdAt(sort: Desc)])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ops history
+// ─────────────────────────────────────────────────────────────────────────
+
+model Webhook {
+  id          String    @id @default(cuid())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  name        String
+  url         String
+  events      String[]
+  secret      String    // hashed (HMAC key)
+  active      Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Deployment {
+  id               String           @id @default(cuid())
+  serverIdentifier String
+  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId           String?
+  status           DeploymentStatus @default(QUEUED)
+  commit           String?
+  ref              String?
+  message          String?
+  log              String?
+  startedAt        DateTime         @default(now())
+  finishedAt       DateTime?
+
+  @@index([serverIdentifier, startedAt(sort: Desc)])
+}
+
+model UsageSnapshot {
+  id               String   @id @default(cuid())
+  serverIdentifier String
+  takenAt          DateTime @default(now())
+  cpu              Float    // percent
+  memBytes         BigInt
+  diskBytes        BigInt
+  rxBytes          BigInt
+  txBytes          BigInt
+
+  @@index([serverIdentifier, takenAt(sort: Desc)])
+}
+
+model CreditLedger {
+  id               String           @id @default(cuid())
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  amount           Int
+  balanceAfter     Int
+  type             CreditLedgerType
+  description      String?
+  serverIdentifier String?
+  createdAt        DateTime         @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([serverIdentifier, createdAt(sort: Desc)])
+}
+
+model ServerSubscription {
+  id               String              @id @default(cuid())
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  serverIdentifier String              @unique
+  pteroServerId    Int                 @unique
+  serverName       String
+  templateId       String?
+  templateVisiblePaths String[]        @default([])
+  memoryMb         Int
+  cpuPct           Int
+  diskMb           Int
+  databases        Int                 @default(0)
+  backups          Int                 @default(0)
+  allocations      Int                 @default(1)
+  monthlyCredits   Int
+  originalMonthlyCredits Int?
+  initialPromoCode String?
+  initialDiscountCredits Int           @default(0)
+  status           ServerBillingStatus @default(ACTIVE)
+  renewalAt        DateTime
+  graceEndsAt      DateTime?
+  lastChargedAt    DateTime?
+  suspendedAt      DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([userId, status])
+  @@index([status, renewalAt])
+}
+
+model PromoCode {
+  id               String          @id @default(cuid())
+  code             String          @unique
+  label            String?
+  description      String?
+  scope            PromoCodeScope  @default(DEPLOY_DISCOUNT)
+  type             PromoCodeType
+  amount           Int
+  maxRedemptions   Int?
+  maxPerUser       Int             @default(1)
+  active           Boolean         @default(true)
+  startsAt         DateTime?
+  expiresAt        DateTime?
+  redemptions      PromoRedemption[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([active, expiresAt])
+  @@index([code, active])
+}
+
+model PromoRedemption {
+  id                  String      @id @default(cuid())
+  promoCode           PromoCode   @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  promoCodeId         String
+  user                User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String
+  serverSubscriptionId String?
+  planId              String?
+  serverIdentifier    String?
+  discountCredits     Int
+  creditedBalance     Int         @default(0)
+  createdAt           DateTime    @default(now())
+
+  @@index([promoCodeId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([serverSubscriptionId])
+}
+
+model SupportTicket {
+  id               String         @id @default(cuid())
+  number           Int            @unique @default(autoincrement())
+  requester        User           @relation("SupportRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  requesterId      String
+  assignee         User?          @relation("SupportAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assigneeId       String?
+  subject          String
+  category         TicketCategory @default(OTHER)
+  priority         TicketPriority @default(NORMAL)
+  status           TicketStatus   @default(OPEN)
+  serverIdentifier String?
+  firstResponseAt  DateTime?
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+  lastReplyAt      DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  messages         SupportMessage[]
+
+  @@index([requesterId, updatedAt(sort: Desc)])
+  @@index([assigneeId, status, updatedAt(sort: Desc)])
+  @@index([status, priority, updatedAt(sort: Desc)])
+}
+
+model SupportMessage {
+  id         String        @id @default(cuid())
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId    String
+  author      User?         @relation("SupportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorId    String?
+  authorName  String
+  body        String
+  internal    Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  attachments SupportAttachment[]
+
+  @@index([ticketId, createdAt])
+}
+
+model SupportAttachment {
+  id         String         @id @default(cuid())
+  message    SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId   String
+  name       String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String
+  createdAt  DateTime       @default(now())
+
+  @@index([messageId, createdAt])
+}

@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Ptero — Enterprise infrastructure platform design system
+   Dark-first · glass panels · terminal aesthetic
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Surfaces */
+  --color-bg: #000000;
+  --color-surface: #090909;
+  --color-card: #111111;
+  --color-elevated: #161616;
+
+  /* Borders */
+  --color-line: #232323;
+  --color-line-hover: #2c2c2c;
+  --color-line-active: #353535;
+
+  /* Accent (teal infra) */
+  --color-accent: #255468;
+  --color-accent-hover: #285c70;
+  --color-accent-deep: #16303d;
+  --color-accent-soft: #2f6b85;
+
+  /* Text */
+  --color-ink: #f5f5f5;
+  --color-ink-secondary: #b3b3b3;
+  --color-ink-muted: #8a8a8a;
+  --color-ink-disabled: #666666;
+
+  /* Status */
+  --color-online: #3fb950;
+  --color-warn: #d29922;
+  --color-danger: #f85149;
+  --color-info: #2f81f7;
+
+  /* Theme-aware translucency (dark defaults match the original design) */
+  --color-hairline: rgba(255, 255, 255, 0.05);
+  --color-hairline2: rgba(255, 255, 255, 0.1);
+  --color-overlay: rgba(255, 255, 255, 0.025);
+  --color-overlay2: rgba(255, 255, 255, 0.05);
+  --grid-color: rgba(255, 255, 255, 0.025);
+  --dot-color: rgba(255, 255, 255, 0.06);
+
+  /* Fonts */
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+
+  /* Radii */
+  --radius-2xl: 1rem;
+
+  /* Shadows */
+  --shadow-glow: 0 0 30px rgba(37, 84, 104, 0.15);
+  --shadow-glow-lg: 0 0 60px rgba(37, 84, 104, 0.25);
+  --shadow-panel: 0 24px 60px -20px rgba(0, 0, 0, 0.8);
+
+  /* Animations */
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-scan: scan 6s linear infinite;
+  --animate-accordion-down: accordion-down 0.3s ease-out;
+  --animate-accordion-up: accordion-up 0.3s ease-out;
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(63, 185, 80, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0);
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+/* ── Light theme overrides ── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg: #f6f7f9;
+  --color-surface: #eceef1;
+  --color-card: #ffffff;
+  --color-elevated: #f1f3f6;
+
+  --color-line: #e2e5ea;
+  --color-line-hover: #d2d6dd;
+  --color-line-active: #bcc2cc;
+
+  --color-accent: #1f4c5f;
+  --color-accent-hover: #255468;
+  --color-accent-deep: #16303d;
+  --color-accent-soft: #1f4c5f;
+
+  --color-ink: #0c0e12;
+  --color-ink-secondary: #3a4048;
+  --color-ink-muted: #697079;
+  --color-ink-disabled: #a3a9b1;
+
+  --color-hairline: rgba(12, 16, 22, 0.1);
+  --color-hairline2: rgba(12, 16, 22, 0.16);
+  --color-overlay: rgba(12, 16, 22, 0.035);
+  --color-overlay2: rgba(12, 16, 22, 0.06);
+  --grid-color: rgba(12, 16, 22, 0.05);
+  --dot-color: rgba(12, 16, 22, 0.08);
+
+  --shadow-glow: 0 0 30px rgba(37, 84, 104, 0.12);
+  --shadow-glow-lg: 0 0 50px rgba(37, 84, 104, 0.16);
+  --shadow-panel: 0 24px 50px -24px rgba(12, 16, 22, 0.25);
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Density preference — scales the rem grid (spacing + text) */
+:root[data-density="compact"] {
+  font-size: 15px;
+}
+
+/* Accessibility — respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Selection */
+::selection {
+  background: rgba(37, 84, 104, 0.4);
+  color: #fff;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line-hover);
+  background-clip: content-box;
+}
+
+/* ── Utility layer ── */
+@layer utilities {
+  /* Glass panel — opaque-leaning so menus & popovers stay legible over
+     busy backgrounds. 88% card-tinted, heavy blur, hairline border. */
+  .glass {
+    background: color-mix(in srgb, var(--color-card) 88%, transparent);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid var(--color-hairline2);
+  }
+
+  /* Card with soft border per spec */
+  .card-base {
+    background: var(--color-card);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-2xl);
+  }
+
+  /* Accent gradient */
+  .accent-gradient {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-accent) 0%,
+      var(--color-accent-deep) 100%
+    );
+  }
+  .accent-text {
+    background-image: linear-gradient(
+      135deg,
+      #6fb3cc 0%,
+      var(--color-accent) 60%,
+      var(--color-accent-deep) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Grain / noise overlay */
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' /%3E%3C/svg%3E");
+  }
+
+  /* Dotted / grid backgrounds */
+  .bg-grid {
+    background-image: linear-gradient(
+        to right,
+        var(--grid-color) 1px,
+        transparent 1px
+      ),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  .bg-dots {
+    background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* Radial spotlight */
+  .spotlight {
+    background: radial-gradient(
+      600px circle at 50% 0%,
+      rgba(37, 84, 104, 0.18),
+      transparent 70%
+    );
+  }
+
+  /* Shimmer skeleton */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.02) 25%,
+      rgba(255, 255, 255, 0.06) 37%,
+      rgba(255, 255, 255, 0.02) 63%
+    );
+    background-size: 400% 100%;
+    animation: var(--animate-shimmer);
+  }
+
+  /* Hide scrollbar */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Focus ring */
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+  }
+}
